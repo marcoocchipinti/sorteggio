@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sorteggio di Natale 🎄</title>
+<meta property="og:title" content="Sorteggio di Natale 🎄">
+<meta property="og:description" content="Scegli il tuo numero da 1 a 90 e prenotalo!">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#f6f3ee; --card:#fff; --ink:#1f2a2e; --muted:#6b7478;
+    --free:#ffffff; --free-b:#d9d4cc;
+    --res:#d93b3b; --paid:#1f9d55; --gold:#c9962b;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+  header{background:#123d2c;color:#fff;padding:22px 16px 18px;text-align:center}
+  header h1{margin:0;font-size:24px;letter-spacing:.3px}
+  header p{margin:6px 0 0;opacity:.85;font-size:14px}
+  main{max-width:560px;margin:0 auto;padding:14px 12px 40px}
+  .stats{display:flex;gap:8px;margin-bottom:12px}
+  .stat{flex:1;background:var(--card);border-radius:12px;padding:10px 6px;text-align:center;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+  .stat b{display:block;font-size:20px}
+  .stat span{font-size:12px;color:var(--muted)}
+  .stat .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:middle}
+  .grid{display:grid;grid-template-columns:repeat(9,1fr);gap:6px}
+  .n{aspect-ratio:1;border-radius:10px;border:1.5px solid var(--free-b);background:var(--free);
+     font-size:17px;font-weight:700;color:var(--ink);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+  .n.reserved{background:var(--res);border-color:var(--res);color:#fff}
+  .n.paid{background:var(--paid);border-color:var(--paid);color:#fff}
+  .n:active{transform:scale(.94)}
+  .msg{text-align:center;color:var(--muted);font-size:14px;margin:14px 0}
+  .list{margin-top:22px;background:var(--card);border-radius:12px;padding:6px 12px;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+  .list h2{font-size:15px;margin:10px 0 6px}
+  .row{display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid #eee;font-size:14px}
+  .row:first-of-type{border-top:0}
+  .badge{min-width:34px;height:28px;border-radius:8px;color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .row .who{flex:1;overflow-wrap:anywhere}
+  .row .who small{display:block;color:var(--muted)}
+  /* modal */
+  .back{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;justify-content:center;z-index:10}
+  .back.open{display:flex}
+  .sheet{background:#fff;width:100%;max-width:560px;border-radius:18px 18px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom))}
+  .sheet h3{margin:0 0 4px;font-size:20px}
+  .sheet .big{font-size:44px;font-weight:800;margin:4px 0 10px}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  input,textarea{width:100%;font-size:16px;padding:11px 12px;border:1.5px solid #d6d6d6;border-radius:10px;font-family:inherit}
+  textarea{min-height:64px;resize:vertical}
+  .btns{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+  button.b{flex:1;font-size:16px;font-weight:600;padding:13px;border-radius:12px;border:0;cursor:pointer}
+  .b.pri{background:#123d2c;color:#fff}
+  .b.sec{background:#eee;color:var(--ink)}
+  .b.red{background:var(--res);color:#fff}
+  .b.green{background:var(--paid);color:#fff}
+  .b:disabled{opacity:.5}
+  .err{color:var(--res);font-size:14px;margin-top:8px;min-height:18px}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1f2a2e;color:#fff;padding:10px 16px;border-radius:999px;font-size:14px;display:none;z-index:20}
+  .admin-bar{background:var(--gold);color:#fff;text-align:center;font-size:13px;padding:6px;display:none}
+  .admin-bar button{background:rgba(255,255,255,.25);border:0;color:#fff;border-radius:6px;padding:3px 8px;margin-left:8px}
+</style>
+</head>
+<body>
+<div class="admin-bar" id="adminBar">Modalità organizzatore attiva <button id="adminOff">Esci</button></div>
+<header>
+  <h1 id="title">🎄 Sorteggio di Natale</h1>
+  <p>Tocca un numero libero per prenotarlo</p>
+</header>
+<main>
+  <div class="stats">
+    <div class="stat"><b id="cFree">–</b><span><i class="dot" style="background:#fff;border:1px solid #ccc"></i>Liberi</span></div>
+    <div class="stat"><b id="cRes">–</b><span><i class="dot" style="background:var(--res)"></i>Prenotati</span></div>
+    <div class="stat"><b id="cPaid">–</b><span><i class="dot" style="background:var(--paid)"></i>Pagati</span></div>
+  </div>
+  <div class="grid" id="grid"></div>
+  <div class="msg" id="msg">Caricamento…</div>
+  <div class="list" id="list" style="display:none"><h2>Partecipanti</h2><div id="rows"></div></div>
+</main>
+
+<div class="back" id="back">
+  <div class="sheet" id="sheet"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ======= CONFIGURA QUI ======= */
+const SUPABASE_URL  = 'https://zlhrlwuwnbspjiffmxwb.supabase.co';
+const SUPABASE_ANON = 'sb_publishable_L4owXwS8BkkUQn0KJJjorQ_hXoOM3GR';
+/* ============================= */
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+const $ = id => document.getElementById(id);
+let data = {};          // number -> row
+let adminPin = null;
+try { adminPin = sessionStorage.getItem('sorteggio_pin'); } catch(e){}
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function toast(t){ const el=$('toast'); el.textContent=t; el.style.display='block'; clearTimeout(el._t); el._t=setTimeout(()=>el.style.display='none',2600); }
+
+function buildGrid(){
+  const g=$('grid'); g.innerHTML='';
+  for(let i=1;i<=90;i++){
+    const b=document.createElement('button');
+    b.className='n'; b.id='n'+i; b.textContent=i;
+    b.onclick=()=>openNumber(i);
+    g.appendChild(b);
+  }
+}
+
+function render(){
+  let r=0,p=0;
+  for(let i=1;i<=90;i++){
+    const row=data[i], b=$('n'+i);
+    b.className='n'+(row?' '+row.status:'');
+    if(row){ row.status==='paid'?p++:r++; }
+  }
+  $('cFree').textContent=90-r-p; $('cRes').textContent=r; $('cPaid').textContent=p;
+  const rows=Object.values(data).sort((a,b)=>a.number-b.number);
+  $('list').style.display=rows.length?'block':'none';
+  $('rows').innerHTML=rows.map(x=>`
+    <div class="row">
+      <div class="badge" style="background:${x.status==='paid'?'var(--paid)':'var(--res)'}">${x.number}</div>
+      <div class="who">${esc(x.name)}${x.notes?`<small>${esc(x.notes)}</small>`:''}</div>
+      <small style="color:var(--muted)">${x.status==='paid'?'Pagato':'Prenotato'}</small>
+    </div>`).join('');
+  $('adminBar').style.display=adminPin?'block':'none';
+}
+
+async function load(){
+  const {data:rows,error}=await sb.from('sorteggio_numbers').select('number,name,notes,status').order('number');
+  if(error){ $('msg').textContent='Errore di collegamento: '+error.message; return; }
+  data={}; rows.forEach(x=>data[x.number]=x);
+  $('msg').textContent='Aggiornamento automatico attivo';
+  render();
+}
+
+function openSheet(html){ $('sheet').innerHTML=html; $('back').classList.add('open'); }
+function closeSheet(){ $('back').classList.remove('open'); }
+$('back').onclick=e=>{ if(e.target.id==='back') closeSheet(); };
+
+function openNumber(n){
+  const row=data[n];
+  if(!row){
+    openSheet(`
+      <h3>Prenota il numero</h3>
+      <div class="big">${n}</div>
+      <label>Il tuo nome *</label>
+      <input id="fName" maxlength="80" autocomplete="name" placeholder="Nome e cognome">
+      <label>Note (facoltative)</label>
+      <textarea id="fNotes" maxlength="300" placeholder="Es. pago sabato"></textarea>
+      <div class="err" id="fErr"></div>
+      <div class="btns">
+        <button class="b sec" onclick="closeSheet()">Annulla</button>
+        <button class="b pri" id="fGo">Prenota</button>
+      </div>`);
+    try{ $('fName').value=localStorage.getItem('sorteggio_name')||''; }catch(e){}
+    $('fGo').onclick=()=>reserve(n);
+    return;
+  }
+  const st=row.status==='paid'?'<span style="color:var(--paid);font-weight:700">Pagato</span>':'<span style="color:var(--res);font-weight:700">Prenotato</span>';
+  let adminBtns='';
+  if(adminPin){
+    adminBtns=`<div class="btns">
+      ${row.status!=='paid'?`<button class="b green" onclick="adminSet(${n},'paid')">Segna pagato</button>`:`<button class="b red" onclick="adminSet(${n},'reserved')">Torna prenotato</button>`}
+      <button class="b sec" onclick="adminSet(${n},'free')">Libera numero</button>
+    </div><div class="err" id="aErr"></div>`;
+  }
+  openSheet(`
+    <h3>Numero ${n}</h3>
+    <div class="big">${n}</div>
+    <div style="font-size:17px"><b>${esc(row.name)}</b> · ${st}</div>
+    ${row.notes?`<div style="color:var(--muted);margin-top:6px">${esc(row.notes)}</div>`:''}
+    ${adminBtns}
+    <div class="btns"><button class="b sec" onclick="closeSheet()">Chiudi</button></div>`);
+}
+
+async function reserve(n){
+  const name=$('fName').value.trim(), notes=$('fNotes').value.trim();
+  if(!name){ $('fErr').textContent='Inserisci il tuo nome'; return; }
+  $('fGo').disabled=true; $('fErr').textContent='';
+  const {error}=await sb.rpc('reserve_sorteggio_number',{p_number:n,p_name:name,p_notes:notes});
+  if(error){
+    $('fErr').textContent=/already|già|duplicate/i.test(error.message)?'Peccato, qualcuno l\'ha appena preso! Scegline un altro.':error.message;
+    $('fGo').disabled=false; load(); return;
+  }
+  try{ localStorage.setItem('sorteggio_name',name); }catch(e){}
+  closeSheet(); toast('Numero '+n+' prenotato! 🎉'); load();
+}
+
+async function adminSet(n,status){
+  const {error}=await sb.rpc('admin_set_sorteggio_status',{p_number:n,p_status:status,p_pin:adminPin});
+  if(error){
+    $('aErr').textContent=error.message;
+    if(/PIN/i.test(error.message)){ adminPin=null; try{sessionStorage.removeItem('sorteggio_pin');}catch(e){} render(); }
+    return;
+  }
+  closeSheet(); toast(status==='paid'?'Segnato come pagato':status==='free'?'Numero liberato':'Tornato prenotato'); load();
+}
+
+/* Modalità organizzatore: tieni premuto il titolo per 2 secondi */
+let pressT;
+$('title').addEventListener('pointerdown',()=>{ pressT=setTimeout(askPin,2000); });
+['pointerup','pointerleave','pointercancel'].forEach(ev=>$('title').addEventListener(ev,()=>clearTimeout(pressT)));
+function askPin(){
+  openSheet(`
+    <h3>Area organizzatore</h3>
+    <label>PIN</label>
+    <input id="pin" type="password" inputmode="numeric">
+    <div class="btns">
+      <button class="b sec" onclick="closeSheet()">Annulla</button>
+      <button class="b pri" id="pinGo">Entra</button>
+    </div>`);
+  $('pinGo').onclick=()=>{
+    adminPin=$('pin').value.trim(); if(!adminPin) return;
+    try{ sessionStorage.setItem('sorteggio_pin',adminPin); }catch(e){}
+    closeSheet(); render(); toast('Tocca un numero per gestirlo');
+  };
+}
+$('adminOff').onclick=()=>{ adminPin=null; try{sessionStorage.removeItem('sorteggio_pin');}catch(e){} render(); };
+
+buildGrid();
+load();
+sb.channel('sorteggio').on('postgres_changes',{event:'*',schema:'public',table:'sorteggio_numbers'},()=>load()).subscribe();
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) load(); });
+</script>
+</body>
+</html>
